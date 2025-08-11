@@ -1,0 +1,134 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auto Pricer (LAN)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; }
+    .wrap { max-width: 1100px; margin: auto; }
+    fieldset { border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; }
+    legend { padding: 0 6px; color: #444; }
+    label { display: block; margin-top: 6px; font-size: 14px; color: #333; }
+    input, select { width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 6px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+    .actions { display: flex; gap: 8px; margin: 10px 0; }
+    .btn { padding: 8px 12px; border-radius: 6px; border: 1px solid #888; background: #f6f6f6; cursor: pointer; text-decoration: none; color: black; text-align: center; }
+    .btn.primary { background: #007bff; border-color: #007bff; color: white; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid #e5e5e5; padding: 6px; font-size: 14px; }
+    th { background: #f2f2f2; }
+    .err { background: #ffecec; border: 1px solid #ffa0a0; padding: 8px; border-radius: 6px; color: #a00000; margin-bottom: 10px; }
+    .status { font-size: 13px; color: #555; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h2>Auto Pricer (LAN)</h2>
+
+  {% if error %}<div class="err">{{ error }}</div>{% endif %}
+
+  <form method="post">
+    <fieldset>
+      <legend>Basic</legend>
+      <div class="row">
+        <div><label>Product Code / ASIN / URL</label><input name="code" value="{{ form.code }}" required></div>
+        <div><label>Title (optional)</label><input name="title" value="{{ form.title }}"></div>
+      </div>
+      <div class="row">
+        <div><label>Required size/qty (comma)</label><input name="req" value="{{ form.req }}"></div>
+        <div><label>Condition</label>
+          <select name="condition">
+            <option value="new" {% if form.condition == 'new' %}selected{% endif %}>New</option>
+            <option value="all" {% if form.condition == 'all' %}selected{% endif %}>All</option>
+          </select>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Advanced</legend>
+      <div class="row3">
+        <div><label>IQR Mult</label><input name="iqr_mult" value="{{ form.iqr_mult }}"></div>
+        <div><label>Min Price</label><input name="min_price" value="{{ form.min_price }}"></div>
+        <div><label>Max Price</label><input name="max_price" value="{{ form.max_price }}"></div>
+      </div>
+      <div class="row3">
+        <div><label>Pages</label><input name="pages" value="{{ form.pages }}"></div>
+        <div><label>Retries</label><input name="retries" value="{{ form.retries }}"></div>
+        <div><label>Attempts</label><input name="attempts" value="{{ form.attempts }}"></div>
+      </div>
+    </fieldset>
+
+    <div class="actions">
+      <button class="btn primary" type="submit">Search</button>
+      <a class="btn" href="{{ url_for('clear') }}">Clear</a>
+    </div>
+  </form>
+
+  {% if suggestion %}
+  <fieldset>
+    <legend>Suggested Price ({{ suggestion_source }})</legend>
+    <strong>${{ suggestion }}</strong>
+    {% if reference %}<div class="status">Ref: <a href="{{ reference }}" target="_blank">{{ reference }}</a></div>{% endif %}
+  </fieldset>
+  {% endif %}
+
+  {% if amazon %}
+  <fieldset>
+    <legend>Amazon Price</legend>
+    <div><strong>${{ "%.2f"|format(amazon.total) }}</strong></div>
+    <div>{{ amazon.title }}</div>
+    {% if amazon.url %}
+      <div><a href="{{ amazon.url }}" target="_blank">View on Amazon</a></div>
+    {% endif %}
+    {% if amazon.asin %}<div class="status">ASIN: {{ amazon.asin }}</div>{% endif %}
+    {% if amazon_note %}<div class="status">{{ amazon_note }}</div>{% endif %}
+  </fieldset>
+  {% endif %}
+
+  {% if results_raw %}
+  <fieldset>
+    <legend>eBay Results (raw: {{ counts.raw }}, used: {{ counts.filtered }})</legend>
+    <table>
+      <thead><tr><th>Source</th><th>Title</th><th>Price</th><th>Shipping</th><th>Total</th><th>URL</th></tr></thead>
+      <tbody>
+      {% for r in results %}
+        <tr>
+          <td>{{ r.source }}</td>
+          <td>{{ r.title }}</td>
+          <td>${{ "%.2f"|format(r.price) if r.price else "-" }}</td>
+          <td>${{ "%.2f"|format(r.shipping) if r.shipping is not none else "-" }}</td>
+          <td>${{ "%.2f"|format(r.total) if r.total else "-" }}</td>
+          <td>{% if r.url %}<a href="{{ r.url }}" target="_blank">link</a>{% else %}-{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% if results_raw|length > results|length %}
+    <details style="margin-top:10px;">
+      <summary>Show raw rows ({{ results_raw|length }})</summary>
+      <table>
+        <thead><tr><th>Source</th><th>Title</th><th>Price</th><th>Shipping</th><th>Total</th><th>URL</th></tr></thead>
+        <tbody>
+        {% for r in results_raw %}
+          <tr>
+            <td>{{ r.source }}</td>
+            <td>{{ r.title }}</td>
+            <td>${{ "%.2f"|format(r.price) if r.price else "-" }}</td>
+            <td>${{ "%.2f"|format(r.shipping) if r.shipping is not none else "-" }}</td>
+            <td>${{ "%.2f"|format(r.total) if r.total else "-" }}</td>
+            <td>{% if r.url %}<a href="{{ r.url }}" target="_blank">link</a>{% else %}-{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </details>
+    {% endif %}
+  </fieldset>
+  {% endif %}
+</div>
+</body>
+</html>
